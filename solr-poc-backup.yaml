@@ -1,0 +1,231 @@
+apiVersion: v1
+stringData:
+  # env.sh: |
+  #   #!/usr/bin/env bash
+
+  #   DOMAIN=example-solrcloud-zookeeper-headless.default.svc.cluster.local
+  #   QUORUM_PORT=2888
+  #   LEADER_PORT=3888
+  #   CLIENT_HOST=example-solrcloud-zookeeper-client
+  #   CLIENT_PORT=2181
+  #   ADMIN_SERVER_HOST=example-solrcloud-zookeeper-admin-server
+  #   ADMIN_SERVER_PORT=8080
+  #   CLUSTER_NAME=example-solrcloud-zookeeper
+  #   CLUSTER_SIZE=3
+  # log4j-quiet.properties: |
+  #   log4j.rootLogger=ERROR, CONSOLE
+  #   log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+  #   log4j.appender.CONSOLE.Threshold=ERROR
+  #   log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+  #   log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+  # log4j.properties: |
+  #   zookeeper.root.logger=CONSOLE
+  #   zookeeper.console.threshold=INFO
+  #   log4j.rootLogger=${zookeeper.root.logger}
+  #   log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+  #   log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}
+  #   log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+  #   log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+  zoo.cfg: |
+    dataDir=/data
+    dataLogDir=/datalog
+    tickTime=2000
+    clientPort=2181
+    initLimit=6
+    syncLimit=2
+    autopurge.snapRetainCount=3
+    autopurge.purgeInterval=0
+    maxClientCnxns=60
+    standaloneEnabled=true
+    admin.enableServer=true
+    4lw.commands.whitelist=mntr,conf,ruok
+
+kind: Secret
+metadata:
+  name: zoo-config
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    app: zookeeper
+spec:
+  ports:
+    - name: client
+      port: 2181
+      targetPort: 2181
+    - name: peer
+      port: 2888
+      targetPort: 2888
+    - name: leader
+      port: 3888
+      targetPort: 3888
+  clusterIP: None
+  selector:
+    app: zookeeper
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr
+  labels:
+    app: solr
+spec:
+  clusterIP: None
+  ports:
+    - name: solr
+      port: 8983
+      targetPort: 8983
+  selector:
+    app: solr
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      # initContainers:
+      # - name: init-container-3
+      #   image: busybox:latest
+      #   command: ["/bin/sh", "-c"]
+      #   args:
+      #   - chown -R 2181:2181 /data
+      #   volumeMounts:
+      #   - name: zoo
+      #     mountPath: /data
+      volumes:
+      - secret:
+          defaultMode: 420
+          secretName: zoo-config
+        name: conf
+      containers:
+      - name: zookeeper
+        image: zookeeper:latest
+        ports:
+        - containerPort: 2181 # ZooKeeper client port
+          name: zoo-client
+        - containerPort: 2888 # ZooKeeper peer port
+          name: zoo-peer
+        - containerPort: 3888 # ZooKeeper leader election port
+          name: zoo-leader
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: log
+          mountPath: /datalog
+        - name: conf
+          mountPath: /conf
+        # - name: datalog
+        #   mountPath: /datalog
+        # - name: home
+        #   mountPath: apache-zookeeper-3.9.1-bin
+        # - name: zoo1
+        #   mountPath: /conf
+        env:
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: ZOO_SERVERS
+            value: "server.1=zookeeper-0.zookeeper:2888:3888 server.2=zookeeper-1.zookeeper:2888:3888"
+        # - name: ZOO_4LW_COMMANDS_WHITELIST
+        #   value: "mntr, conf, ruok"
+        # - name: ZOO_CFG_EXTRA
+        #   value: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "solr-storage"
+      resources:
+        requests:
+          storage: 1Gi
+  - metadata:
+      name: log
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "solr-storage"
+      resources:
+        requests:
+          storage: 1Gi
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+spec:
+  serviceName: solr
+  replicas: 3
+  selector:
+    matchLabels:
+      app: solr
+  template:
+    metadata:
+      labels:
+        app: solr
+    spec:
+      volumes:
+        - configMap:
+            defaultMode: 444
+            items:
+            - key: solr.xml
+              path: solr.xml
+            name: solr-config
+          name: solr-xml
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /opt/solr/server/solr/solr.xml /var/solr/data/solr.xml
+        image: solr:latest
+        imagePullPolicy: IfNotPresent
+        name: cp-solr-xml
+        volumeMounts:
+        - mountPath: /var/solr/data
+          name: data
+      containers:
+      - name: solr
+        image: solr:latest
+        ports:
+        - containerPort: 8983
+        env:
+          - name: ZK_HOST
+            value: zookeeper:2181
+        volumeMounts:
+        - name: data
+          mountPath: /var/solr/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: "solr-storage"
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

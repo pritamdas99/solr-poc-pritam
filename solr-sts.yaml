@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr
+  labels:
+    app: solr
+spec:
+  clusterIP: None
+  selector:
+    app: solr
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr-service
+  labels:
+    app: solr
+spec:
+  ports:
+  - protocol: TCP
+    port: 8983
+    targetPort: 8983
+  type: LoadBalancer
+  selector:
+    app: solr
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zoo
+  labels:
+    app: zoo
+spec:
+  clusterIP: None
+  selector:
+    app: zoo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk-service
+  labels:
+    app: zoo
+spec:
+  ports:
+  - protocol: TCP
+    port: 2181
+    targetPort: 2181
+  type: LoadBalancer
+  selector:
+    app: zoo
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zoo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zoo
+  template:
+    metadata:
+      labels:
+        app: zoo
+    spec:
+      # initContainers:
+      # - name: init-container-3
+      #   image: busybox:latest
+      #   command: ["/bin/sh", "-c"]
+      #   args:
+      #   - chown -R 2181:2181 /data
+      #   volumeMounts:
+      #   - name: zoo
+      #     mountPath: /data
+      containers:
+      - name: zoo
+        image: zookeeper:latest
+        ports:
+        - containerPort: 2181 # ZooKeeper client port
+          name: zoo-client
+        - containerPort: 2888 # ZooKeeper peer port
+        - containerPort: 3888 # ZooKeeper leader election port
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        # - name: log
+        #   mountPath: /log
+        # - name: datalog
+        #   mountPath: /datalog
+        # - name: home
+        #   mountPath: apache-zookeeper-3.9.1-bin
+        # - name: zoo1
+        #   mountPath: /conf
+        env:
+        - name: ZOO_4LW_COMMANDS_WHITELIST
+          value: "mntr, conf, ruok"
+        - name: ZOO_CFG_EXTRA
+          value: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 1Gi
+  # - metadata:
+  #     name: log
+  #   spec:
+  #     accessModes: ["ReadWriteOnce"]
+  #     storageClassName: "standard"
+  #     resources:
+  #       requests:
+  #         storage: 1Gi
+  # - metadata:
+  #     name: datalog
+  #   spec:
+  #     accessModes: ["ReadWriteOnce"]
+  #     storageClassName: "solr-storage"
+  #     resources:
+  #       requests:
+  #         storage: 1G
+  # - metadata:
+  #     name: home
+  #   spec:
+  #     accessModes: ["ReadWriteOnce"]
+  #     storageClassName: "solr-storage"
+  #     resources:
+  #       requests:
+  #         storage: 1Gi
+  # - metadata:
+  #     name: zoo1
+  #   spec:
+  #     accessModes: ["ReadWriteOnce"]
+  #     storageClassName: "solr-storage"
+  #     resources:
+  #       requests:
+  #         storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr
+spec:
+  selector:
+    matchLabels:
+      app: solr
+  serviceName: "solr"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: solr
+    spec:
+      initContainers:
+      - name: init-solr-xml
+        image: solr:latest
+        command:
+        - "/bin/sh"
+        - "-c"
+        - "if [ ! -f $SOLR_HOME/solr.xml ] ; then touch $SOLR_HOME/solr.xml && cp /opt/solr/server/solr/solr.xml $SOLR_HOME;sed -i \"s/<solr>/<solr><str name='sharedLib'>\\/var\\/solr\\/data<\\/str>/g\" $SOLR_HOME/solr.xml ; else true; fi "
+        volumeMounts:
+        - name: solr-pvc
+          mountPath: /var/solr/data
+      containers:
+      - name: solr
+        image: solr:latest
+        ports:
+        - containerPort: 8983
+          name: solr
+        env:
+        - name: SOLR_HOME
+          value: /var/solr/data 
+        - name: SOLR_CORE
+          value: data_core
+        - name: ZK_HOST
+          value: zoo-0.zoo:2181
+        volumeMounts:
+        - name: solr-pvc
+          mountPath: /var/solr/data
+  volumeClaimTemplates:
+  - metadata:
+      name: solr-pvc
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 1Gi

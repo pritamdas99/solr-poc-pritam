@@ -1,0 +1,210 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    solr.apache.org/zkConnectionString: example-solrcloud-zookeeper-0.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-1.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-2.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181/
+  creationTimestamp: "2023-10-21T12:17:06Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/instance: example-solr
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: solr
+    app.kubernetes.io/version: 8.11.1
+    helm.sh/chart: solr-0.8.0
+    solr-cloud: example
+    technology: solr-cloud
+  name: example-solrcloud
+  namespace: default
+  ownerReferences:
+  - apiVersion: solr.apache.org/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: SolrCloud
+    name: example
+    uid: 6a32fb67-65f1-4487-a0dc-26eebff3357f
+  resourceVersion: "1698133"
+  uid: 014e8835-f3fc-4036-ae4d-7a8a3f2d0b2e
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: Parallel
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      solr-cloud: example
+      technology: solr-cloud
+  serviceName: example-solrcloud-headless
+  template:
+    metadata:
+      annotations:
+        solr.apache.org/solrXmlMd5: 5fe99d590bc63efc3caa743ca939aa5a
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/instance: example-solr
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: solr
+        app.kubernetes.io/version: 8.11.1
+        helm.sh/chart: solr-0.8.0
+        solr-cloud: example
+        technology: solr-cloud
+    spec:
+      containers:
+      - env:
+        - name: SOLR_JAVA_MEM
+          value: -Xms1g -Xmx1g
+        - name: SOLR_HOME
+          value: /var/solr/data
+        - name: SOLR_PORT
+          value: "8983"
+        - name: SOLR_NODE_PORT
+          value: "8983"
+        - name: SOLR_PORT_ADVERTISE
+          value: "8983"
+        - name: POD_HOSTNAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SOLR_HOST
+          value: $(POD_NAME).example-solrcloud-headless.default
+        - name: SOLR_LOG_LEVEL
+          value: INFO
+        - name: GC_TUNE
+        - name: SOLR_STOP_WAIT
+          value: "55"
+        - name: ZK_HOST
+          value: example-solrcloud-zookeeper-0.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-1.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-2.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181/
+        - name: ZK_CHROOT
+          value: /
+        - name: ZK_SERVER
+          value: example-solrcloud-zookeeper-0.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-1.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181,example-solrcloud-zookeeper-2.example-solrcloud-zookeeper-headless.default.svc.cluster.local:2181
+        - name: SOLR_OPTS
+          value: -DhostPort=$(SOLR_NODE_PORT)
+        image: solr:8.3
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - solr
+              - stop
+              - -p
+              - "8983"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: example-solrcloud-common.default
+            path: /solr/admin/info/system
+            port: 8983
+            scheme: HTTP
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: solrcloud-node
+        ports:
+        - containerPort: 8983
+          name: solr-client
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 2
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: example-solrcloud-common.default
+            path: /solr/admin/info/health
+            port: 8983
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {}
+        startupProbe:
+          failureThreshold: 10
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: example-solrcloud-common.default
+            path: /solr/admin/info/system
+            port: 8983
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/solr/data
+          name: data
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /tmp/solr.xml /tmp-config/solr.xml
+        image: library/busybox:1.28.0-glibc
+        imagePullPolicy: IfNotPresent
+        name: cp-solr-xml
+        resources:
+          limits:
+            cpu: "50e-3"
+            memory: 50M
+          requests:
+            cpu: "50e-3"
+            memory: 50M
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /tmp
+          name: solr-xml
+        - mountPath: /tmp-config
+          name: data
+      readinessGates:
+      - conditionType: solr.apache.org/isNotStopped
+      - conditionType: solr.apache.org/replicasNotEvicted
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 8983
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - configMap:
+          defaultMode: 444
+          items:
+          - key: solr.xml
+            path: solr.xml
+          name: example-solrcloud-configmap
+        name: solr-xml
+      - emptyDir:
+          sizeLimit: 20Gi
+        name: data
+  updateStrategy:
+    type: OnDelete
+status:
+  availableReplicas: 0
+  collisionCount: 0
+  currentReplicas: 3
+  currentRevision: example-solrcloud-7c6ff98586
+  observedGeneration: 1
+  replicas: 3
+  updateRevision: example-solrcloud-7c6ff98586
+  updatedReplicas: 3

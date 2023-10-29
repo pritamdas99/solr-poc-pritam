@@ -1,0 +1,236 @@
+version: '3'
+
+services:
+
+  solr1:
+    container_name: solr1
+    image: samuelrac/solr:8.8.2
+    restart: always
+    volumes:
+      - solr1_data:/var/solr/data
+    ports:
+     - "0.0.0.0:8981:8983"
+    environment:
+      - SOLR_AUTH_TYPE=basic
+      - SOLR_JAVA_MEM=-Xms1024M -Xmx2048M
+      - ZK_HOST=zk1:2181,zk2:2181,zk3:2181
+    networks:
+      - solr
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+      resources:
+        limits:
+          memory: 2560M
+        reservations:
+          memory: 2048M
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+
+  solr2:
+    container_name: solr2
+    image: samuelrac/solr:8.8.2
+    restart: always
+    volumes:
+      - solr2_data:/var/solr/data
+    ports:
+     - "0.0.0.0:8982:8983"
+    environment:
+      - SOLR_AUTH_TYPE=basic
+      - SOLR_JAVA_MEM=-Xms1024M -Xmx2048M
+      - ZK_HOST=zk1:2181,zk2:2181,zk3:2181
+    networks:
+      - solr
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+      resources:
+        limits:
+          memory: 2560M
+        reservations:
+          memory: 2048M
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+
+  solr3:
+    container_name: solr3
+    image: samuelrac/solr:8.8.2
+    restart: always
+    volumes:
+      - solr3_data:/var/solr/data
+    ports:
+     - "0.0.0.0:8983:8983"
+    environment:
+      - SOLR_AUTH_TYPE=basic
+      - SOLR_JAVA_MEM=-Xms1024M -Xmx2048M
+      - ZK_HOST=zk1:2181,zk2:2181,zk3:2181
+    networks:
+      - solr
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+      resources:
+        limits:
+          memory: 2560M
+        reservations:
+          memory: 2048M
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+
+  zk1:
+    image: zookeeper:3.7.0
+    restart: always
+    container_name: zk1
+    hostname: zk1
+    ports:
+      - "0.0.0.0:2181:2181"
+      - "0.0.0.0:7001:7000"
+    volumes:
+      - zookeeper1_log:/logs
+      - zookeeper1_data:/data
+      - zookeeper1_datalog:/datalog
+      - zookeeper1_wd:/apache-zookeeper-3.7.0-bin
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr, conf, ruok
+      ZOO_CFG_EXTRA: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+    networks:
+      - solr
+  
+  zk1_exp:
+    image: dabealu/zookeeper-exporter
+    restart: always
+    networks:
+      - solr
+    ports:
+      - "0.0.0.0:9141:9141"
+    command: --zk-hosts="zk1:2181"
+
+  zk2:
+    image: zookeeper:3.7.0
+    restart: always
+    container_name: zk2
+    hostname: zk2
+    ports:
+      - "0.0.0.0:2182:2181"
+      - "0.0.0.0:7002:7000"
+    volumes:
+      - zookeeper2_log:/logs
+      - zookeeper2_data:/data
+      - zookeeper2_datalog:/datalog
+      - zookeeper2_wd:/apache-zookeeper-3.7.0-bin
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr, conf, ruok
+      ZOO_CFG_EXTRA: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+    networks:
+      - solr
+
+  zk2_exp:
+    image: dabealu/zookeeper-exporter
+    restart: always
+    networks:
+      - solr
+    ports:
+      - "0.0.0.0:9142:9141"
+    command: --zk-hosts="zk2:2181"
+
+  zk3:
+    image: zookeeper:3.7.0
+    restart: always
+    container_name: zk3
+    hostname: zk3
+    ports:
+      - "0.0.0.0:2183:2181"
+      - "0.0.0.0:7003:7000"
+    volumes:
+      - zookeeper3_log:/logs
+      - zookeeper3_data:/data
+      - zookeeper3_datalog:/datalog
+      - zookeeper3_wd:/apache-zookeeper-3.7.0-bin
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    deploy:
+      placement:
+        constraints: 
+          - "node.role == manager"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr, conf, ruok
+      ZOO_CFG_EXTRA: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000 metricsProvider.exportJvmInfo=true"
+    networks:
+      - solr
+
+  zk3_exp:
+    image: dabealu/zookeeper-exporter
+    restart: always
+    networks:
+      - solr
+    ports:
+      - "0.0.0.0:9143:9141"
+    command: --zk-hosts="zk3:2181"
+
+volumes:
+  solr1_data:
+  solr2_data:
+  solr3_data:
+
+  zookeeper1_data:
+  zookeeper1_datalog:
+  zookeeper1_log:
+  zookeeper1_wd:
+
+  zookeeper2_data:
+  zookeeper2_datalog:
+  zookeeper2_log:
+  zookeeper2_wd:
+
+  zookeeper3_data:
+  zookeeper3_datalog:
+  zookeeper3_log:
+  zookeeper3_wd:
+
+networks:
+  solr:
