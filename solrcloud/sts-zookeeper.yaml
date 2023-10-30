@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  creationTimestamp: "2023-10-30T07:03:21Z"
+  generation: 1
+  labels:
+    app: example-solrcloud-zookeeper
+    owner-rv: "8195"
+    release: example-solrcloud-zookeeper
+    solr-cloud: example
+    technology: zookeeper
+  name: example-solrcloud-zookeeper
+  namespace: default
+  ownerReferences:
+  - apiVersion: zookeeper.pravega.io/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ZookeeperCluster
+    name: example-solrcloud-zookeeper
+    uid: fa97b2dd-081c-4315-bd7d-9b6221cd8d02
+  resourceVersion: "8196"
+  uid: 2323f5a8-2014-413d-be9c-59e88bcc2dfa
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: example-solrcloud-zookeeper
+  serviceName: example-solrcloud-zookeeper-headless
+  template:
+    metadata:
+      creationTimestamp: null
+      generateName: example-solrcloud-zookeeper
+      labels:
+        app: example-solrcloud-zookeeper
+        kind: ZookeeperMember
+        release: example-solrcloud-zookeeper
+        solr-cloud: example
+        technology: zookeeper
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - example-solrcloud-zookeeper
+              topologyKey: kubernetes.io/hostname
+            weight: 20
+      containers:
+      - command:
+        - /usr/local/bin/zookeeperStart.sh
+        env:
+        - name: ENVOY_SIDECAR_STATUS
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.annotations['sidecar.istio.io/status']
+        image: pravega/zookeeper:0.2.14
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - zookeeperTeardown.sh
+        livenessProbe:
+          exec:
+            command:
+            - zookeeperLive.sh
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: zookeeper
+        ports:
+        - containerPort: 2181
+          name: client
+          protocol: TCP
+        - containerPort: 2888
+          name: quorum
+          protocol: TCP
+        - containerPort: 3888
+          name: leader-election
+          protocol: TCP
+        - containerPort: 7000
+          name: metrics
+          protocol: TCP
+        - containerPort: 8080
+          name: admin-server
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - zookeeperReady.sh
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            memory: 1G
+          requests:
+            cpu: 65m
+            memory: 156Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /conf
+          name: conf
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: example-solrcloud-zookeeper-configmap
+        name: conf
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: example-solrcloud-zookeeper
+        release: example-solrcloud-zookeeper
+        solr-cloud: example
+        technology: zookeeper
+        uid: fa97b2dd-081c-4315-bd7d-9b6221cd8d02
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: linode-block-storage-retain
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+status:
+  availableReplicas: 2
+  collisionCount: 0
+  currentReplicas: 2
+  currentRevision: example-solrcloud-zookeeper-7c4b57d97
+  observedGeneration: 1
+  readyReplicas: 2
+  replicas: 2
+  updateRevision: example-solrcloud-zookeeper-7c4b57d97
+  updatedReplicas: 2

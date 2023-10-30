@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: "2023-10-30T07:03:21Z"
+  labels:
+    app: example-solrcloud-zookeeper
+    headless: "false"
+    owner-rv: "7811"
+    release: example-solrcloud-zookeeper
+    solr-cloud: example
+    technology: zookeeper
+  name: example-solrcloud-zookeeper-client
+  namespace: default
+  ownerReferences:
+  - apiVersion: zookeeper.pravega.io/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ZookeeperCluster
+    name: example-solrcloud-zookeeper
+    uid: fa97b2dd-081c-4315-bd7d-9b6221cd8d02
+  resourceVersion: "7819"
+  uid: b2281019-096f-4a23-8ae8-200ee5790197
+spec:
+  clusterIP: 10.128.45.245
+  clusterIPs:
+  - 10.128.45.245
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: tcp-client
+    port: 2181
+    protocol: TCP
+    targetPort: 2181
+  selector:
+    app: example-solrcloud-zookeeper
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
