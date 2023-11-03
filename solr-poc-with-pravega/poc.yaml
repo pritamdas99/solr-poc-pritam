@@ -44,6 +44,46 @@ stringData:
 
 ---
 
+apiVersion: v1
+kind: Secret
+metadata:
+  name: solr-certs
+stringData:
+  cacert: "cacerttesting"
+  tlscert: "tlscerttesting"
+  tlskey: "tlskeytesting"
+
+---
+
+# Enables HTTPS. It is implictly true if you set SOLR_SSL_KEY_STORE. Use this config
+# to enable https module with custom jetty configuration.
+#SOLR_SSL_ENABLED=true
+# Uncomment to set SSL-related system properties
+# Be sure to update the paths to the correct keystore for your environment
+#SOLR_SSL_KEY_STORE=etc/solr-ssl.keystore.p12
+#SOLR_SSL_KEY_STORE_PASSWORD=secret
+#SOLR_SSL_TRUST_STORE=etc/solr-ssl.keystore.p12
+#SOLR_SSL_TRUST_STORE_PASSWORD=secret
+# Require clients to authenticate
+#SOLR_SSL_NEED_CLIENT_AUTH=false
+# Enable clients to authenticate (but not require)
+#SOLR_SSL_WANT_CLIENT_AUTH=false
+# Verify client's hostname during SSL handshake
+#SOLR_SSL_CLIENT_HOSTNAME_VERIFICATION=false
+# SSL Certificates contain host/ip "peer name" information that is validated by default. Setting
+# this to false can be useful to disable these checks when re-using a certificate on many hosts.
+# This will also be used for the default value of whether SNI Host checking should be enabled.
+#SOLR_SSL_CHECK_PEER_NAME=true
+# Override Key/Trust Store types if necessary
+#SOLR_SSL_KEY_STORE_TYPE=PKCS12
+#SOLR_SSL_TRUST_STORE_TYPE=PKCS12
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: solr-sh
+stringData:
+  "solr.in.sh": "SOLR_SSL_ENABLED=true/n SOLR_SSL_KEY_STORE=etc/solr-ssl.keystore.p12/n SOLR_SSL_KEY_STORE_PASSWORD=secret/n SOLR_SSL_TRUST_STORE=etc/solr-ssl.keystore.p12/n SOLR_SSL_TRUST_STORE_PASSWORD=secret/n SOLR_SSL_NEED_CLIENT_AUTH=false/n SOLR_SSL_WANT_CLIENT_AUTH=false/n SOLR_SSL_CLIENT_HOSTNAME_VERIFICATION=false"
 
 ---
 
@@ -98,23 +138,21 @@ spec:
               fieldPath: metadata.namespace
         - name: SOLR_HOST
           value: $(POD_NAME).solr.default
-        - name: SOLR_LOG_LEVEL
-          value: INFO
-        - name: GC_TUNE
-          value: -XX:SurvivorRatio=4 -XX:TargetSurvivorRatio=90 -XX:MaxTenuringThreshold=8
-        - name: SOLR_STOP_WAIT
-          value: "55"
+        # - name: SOLR_LOG_LEVEL
+        #   value: INFO
+        # - name: GC_TUNE
+        #   value: -XX:SurvivorRatio=4 -XX:TargetSurvivorRatio=90 -XX:MaxTenuringThreshold=8
+        # - name: SOLR_STOP_WAIT
+        #   value: "55"
         - name: ZK_HOST
-          #value: zookeeper:2181
-          #value: zookeeper.default.svc.cluster.local:2181
           value: zookeeper-0.zookeeper.default.svc.cluster.local:2181,zookeeper-1.zookeeper.default.svc.cluster.local:2181
         - name: ZK_CHROOT
           value: /
-        - name: ZK_SERVER
-          value: zookeeper-0.zookeeper.default.svc.cluster.local:2181,zookeeper-1.zookeeper.default.svc.cluster.local:2181
+        # - name: ZK_SERVER
+        #   value: zookeeper-0.zookeeper.default.svc.cluster.local:2181,zookeeper-1.zookeeper.default.svc.cluster.local:2181
         - name: SOLR_OPTS
           value: -DhostPort=$(SOLR_NODE_PORT) -Dsolr.autoSoftCommit.maxTime=10000
-        image: library/solr:9.4.0
+        image: solr:9.4.0
         name: solr
         ports:
         - containerPort: 8983
@@ -123,6 +161,10 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/solr/data
+        - name: solr-certs
+          mountPath: /opt/solr/server/etc/certs
+        # - name: solr-sh
+        #   mountPath: /opt/solr-9.4.0/bin
       initContainers:
       - command:
         - sh
@@ -152,6 +194,22 @@ spec:
             path: solr.xml
           secretName: solr-config
         name: solr-xml
+      - secret:
+          items:
+          - key: cacert
+            path: cacert
+          - key: tlskey
+            path: tlskey
+          - key: tlscert
+            path: tlscert
+          secretName: solr-certs
+        name: solr-certs
+      - secret:
+          items:
+          - key: solr.in.sh
+            path: solr.in.sh
+          secretName: solr-sh
+        name: solr-sh
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -165,121 +223,3 @@ spec:
           storage: 10Gi
 
 
-# apiVersion: apps/v1
-# kind: StatefulSet
-# metadata:
-#   name: solr
-# spec:
-#   serviceName: solr
-#   replicas: 3
-#   selector:
-#     matchLabels:
-#       app: solr
-#   template:
-#     metadata:
-#       labels:
-#         app: solr
-#     spec:
-#       volumes:
-#       - secret:
-#           defaultMode: 444
-#           items:
-#           - key: solr.xml
-#             path: solr.xml
-#           secretName: solr-config
-#         name: solr-xml
-#       initContainers:
-#       - command:
-#         - sh
-#         - -c
-#         - cp /tmp/solr.xml /tmp-config/solr.xml
-#         image: busybox:latest
-#         imagePullPolicy: IfNotPresent
-#         name: cp-solr-xml
-#         # resources:
-#         #   limits:
-#         #     cpu: "50e-3"
-#         #     memory: 50M
-#         #   requests:
-#         #     cpu: "50e-3"
-#         #     memory: 50M
-#         volumeMounts:
-#         - mountPath: /tmp
-#           name: solr-xml
-#         - mountPath: /tmp-config
-#           name: data
-#       containers:
-#       - name: solr
-#         image: solr:latest
-#         ports:
-#         - containerPort: 8983
-#           name: solr-client
-#         env:
-#         - name: SOLR_JAVA_MEM
-#           value: -Xms1g -Xmx3g
-#         - name: SOLR_HOME
-#           value: /var/solr/data
-#         - name: SOLR_PORT
-#           value: "8983"
-#         - name: SOLR_NODE_PORT
-#           value: "8983"
-#         - name: SOLR_PORT_ADVERTISE
-#           value: "8983"
-#         - name: POD_HOSTNAME
-#           valueFrom:
-#             fieldRef:
-#               apiVersion: v1
-#               fieldPath: metadata.name
-#         - name: POD_NAME
-#           valueFrom:
-#             fieldRef:
-#               apiVersion: v1
-#               fieldPath: metadata.name
-#         - name: POD_IP
-#           valueFrom:
-#             fieldRef:
-#               apiVersion: v1
-#               fieldPath: status.podIP
-#         - name: POD_NAMESPACE
-#           valueFrom:
-#             fieldRef:
-#               apiVersion: v1
-#               fieldPath: metadata.namespace
-#         - name: SOLR_HOST
-#           value: $(POD_NAME).solr.default
-#         - name: SOLR_LOG_LEVEL
-#           value: INFO
-#         - name: GC_TUNE
-#           value: -XX:SurvivorRatio=4 -XX:TargetSurvivorRatio=90 -XX:MaxTenuringThreshold=8
-#         - name: SOLR_STOP_WAIT
-#           value: "55"
-#         - name: ZK_HOST
-#           #value: zookeeper:2181
-#           value: zookeeper-0.zookeeper.default.svc.cluster.local:2181,zookeeper-1.zookeeper.default.svc.cluster.local:2181
-#         - name: ZK_CHROOT
-#           value: /
-#         - name: ZK_SERVER
-#           value: zookeeper-0.zookeeper.default.svc.cluster.local:2181,zookeeper-1.zookeeper.default.svc.cluster.local:2181
-#         - name: SOLR_OPTS
-#           value: -DhostPort=$(SOLR_NODE_PORT) -Dsolr.autoSoftCommit.maxTime=10000
-#         # - name: ZK_HOST
-#         #   value: zookeeper:2181
-#         volumeMounts:
-#         - name: data
-#           mountPath: /var/solr/data
-#   volumeClaimTemplates:
-#   - metadata:
-#       name: data
-#     spec:
-#       storageClassName: "linode-block-storage-retain"
-#       accessModes: ["ReadWriteOnce"]
-#       resources:
-#         requests:
-#           storage: 10Gi
-
-
-
-
-
-
----

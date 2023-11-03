@@ -1,0 +1,423 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: solr-config
+stringData:
+  solr.xml: "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<solr>\n  <str name=\"sharedLib\">${solr.sharedLib:}</str>\n  <solrcloud>\n    <str name=\"host\">${host:}</str>\n    <int name=\"hostPort\">${solr.port.advertise:80}</int>\n    <str name=\"hostContext\">${hostContext:solr}</str>\n    <bool name=\"genericCoreNodeNames\">${genericCoreNodeNames:true}</bool>\n    <int name=\"zkClientTimeout\">${zkClientTimeout:30000}</int>\n    <int name=\"distribUpdateSoTimeout\">${distribUpdateSoTimeout:600000}</int>\n    <int name=\"distribUpdateConnTimeout\">${distribUpdateConnTimeout:60000}</int>\n    <str name=\"zkCredentialsProvider\">${zkCredentialsProvider:org.apache.solr.common.cloud.DefaultZkCredentialsProvider}</str>\n    <str name=\"zkACLProvider\">${zkACLProvider:org.apache.solr.common.cloud.DefaultZkACLProvider}</str>\n  </solrcloud>\n  <shardHandlerFactory name=\"shardHandlerFactory\"\n    class=\"HttpShardHandlerFactory\">\n    <int name=\"socketTimeout\">${socketTimeout:600000}</int>\n    <int name=\"connTimeout\">${connTimeout:60000}</int>\n  </shardHandlerFactory>\n  <int name=\"maxBooleanClauses\">${solr.max.booleanClauses:1024}</int>\n  <str name=\"allowPaths\">${solr.allowPaths:}</str>\n  <metrics enabled=\"${metricsEnabled:true}\"/>\n  \n</solr>\n"
+
+---
+
+# apiVersion: v1
+# stringData:
+#   # env.sh: |
+#   #   #!/usr/bin/env bash
+
+#   #   DOMAIN=example-solrcloud-zookeeper-headless.default.svc.cluster.local
+#   #   QUORUM_PORT=2888
+#   #   LEADER_PORT=3888
+#   #   CLIENT_HOST=example-solrcloud-zookeeper-client
+#   #   CLIENT_PORT=2181
+#   #   ADMIN_SERVER_HOST=example-solrcloud-zookeeper-admin-server
+#   #   ADMIN_SERVER_PORT=8080
+#   #   CLUSTER_NAME=example-solrcloud-zookeeper
+#   #   CLUSTER_SIZE=3
+#   # log4j-quiet.properties: |
+#   #   log4j.rootLogger=ERROR, CONSOLE
+#   #   log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+#   #   log4j.appender.CONSOLE.Threshold=ERROR
+#   #   log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+#   #   log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+#   # log4j.properties: |
+#   #   zookeeper.root.logger=CONSOLE
+#   #   zookeeper.console.threshold=INFO
+#   #   log4j.rootLogger=${zookeeper.root.logger}
+#   #   log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+#   #   log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}
+#   #   log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+#   #   log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+#   zoo.cfg: |
+#     dataDir=/data
+#     dataLogDir=/datalog
+#     tickTime=2000
+#     clientPort=2181
+#     initLimit=5
+#     syncLimit=2
+#     autopurge.snapRetainCount=3
+#     autopurge.purgeInterval=0
+#     maxClientCnxns=60
+#     standaloneEnabled=true
+#     admin.enableServer=true
+#     4lw.commands.whitelist=mntr,conf,ruok
+
+# kind: Secret
+# metadata:
+#   name: zoo-config
+
+
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: zookeeper
+#   labels:
+#     app: zookeeper
+# spec:
+#   ports:
+#   - name: client
+#     port: 2181
+#     targetPort: 2181
+#   - name: peer
+#     port: 2888
+#     targetPort: 2888
+#   - name: leader
+#     port: 3888
+#     targetPort: 3888
+#   clusterIP: None
+#   selector:
+#     app: zookeeper
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: solr
+  labels:
+    app: solr
+spec:
+  clusterIP: None
+  ports:
+  - name: solr
+    port: 8983
+    targetPort: 8983
+  selector:
+    app: solr
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: solro
+  labels:
+    app: solr
+spec:
+  type: ClusterIP
+  ports:
+  - name: solr
+    port: 8983
+    targetPort: 8983
+  selector:
+    app: solr
+    data: set
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: solrc
+  labels:
+    app: solr
+spec:
+  type: ClusterIP
+  ports:
+  - name: solr
+    port: 8983
+    targetPort: 8983
+  selector:
+    app: solr
+    coordinator: set
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: solroo
+  labels:
+    app: solr
+spec:
+  type: ClusterIP
+  ports:
+  - name: solr
+    port: 8983
+    targetPort: 8983
+  selector:
+    app: solr
+    overseer: set
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr-data
+  labels:
+    app: solr
+    data: set
+spec:
+  serviceName: solr
+  replicas: 2
+  selector:
+    matchLabels:
+      app: solr
+      data: set
+  template:
+    metadata:
+      labels:
+        app: solr
+        data: set
+    spec:
+      volumes:
+      - configMap:
+          defaultMode: 444
+          items:
+          - key: solr.xml
+            path: solr.xml
+          name: solr-config
+        name: solr-xml
+      securityContext:
+        fsGroup: 8983
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /opt/solr/server/solr/solr.xml /var/solr/data/solr.xml
+        image: solr:latest
+        imagePullPolicy: IfNotPresent
+        name: cp-solr-xml
+        volumeMounts:
+        - mountPath: /var/solr/data
+          name: data
+      containers:
+      - name: solr
+        image: solr:latest
+        ports:
+        - containerPort: 8983
+        env:
+        - name: SOLR_HOME
+          value: /var/solr/data
+        - name: SOLR_PORT
+          value: "8983"
+        # - name: POD_HOSTNAME
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.name
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        # - name: POD_IP
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: status.podIP
+        # - name: POD_NAMESPACE
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.namespace
+        - name: SOLR_HOST
+          value: $(POD_NAME).solr.default
+        - name: ZK_HOST
+          value: zookeeper.default.svc.cluster.local:2181
+        - name: SOLR_OPTS
+          value: "-Dsolr.node.roles=data:on,overseer:disallowed"
+        volumeMounts:
+        - name: data
+          mountPath: /var/solr/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: "linode-block-storage-retain"
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr-overseer
+  labels:
+    app: solr
+    overseer: set
+spec:
+  serviceName: solr
+  replicas: 2
+  selector:
+    matchLabels:
+      app: solr
+      overseer: set
+  template:
+    metadata:
+      labels:
+        app: solr
+        overseer: set
+    spec:
+      volumes:
+      - configMap:
+          defaultMode: 444
+          items:
+          - key: solr.xml
+            path: solr.xml
+          name: solr-config
+        name: solr-xml
+      securityContext:
+        fsGroup: 8983
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /opt/solr/server/solr/solr.xml /var/solr/data/solr.xml
+        image: solr:latest
+        imagePullPolicy: IfNotPresent
+        name: cp-solr-xml
+        volumeMounts:
+        - mountPath: /var/solr/data
+          name: data
+      containers:
+      - name: solr
+        image: solr:latest
+        ports:
+        - containerPort: 8983
+        env:
+        - name: SOLR_HOME
+          value: /var/solr/data
+        - name: SOLR_PORT
+          value: "8983"
+        # - name: POD_HOSTNAME
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.name
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        # - name: POD_IP
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: status.podIP
+        # - name: POD_NAMESPACE
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.namespace
+        - name: SOLR_HOST
+          value: $(POD_NAME).solr.default
+        - name: ZK_HOST
+          value: zookeeper.default.svc.cluster.local:2181
+        - name: SOLR_OPTS
+          value: "-Dsolr.node.roles=data:off,overseer:allowed"
+        volumeMounts:
+        - name: data
+          mountPath: /var/solr/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: "linode-block-storage-retain"
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: solr-coordinator
+  labels:
+    app: solr
+    coordinator: set
+spec:
+  serviceName: solr
+  replicas: 2
+  selector:
+    matchLabels:
+      app: solr
+      coordinator: set
+  template:
+    metadata:
+      labels:
+        app: solr
+        coordinator: set
+    spec:
+      volumes:
+      - configMap:
+          defaultMode: 444
+          items:
+          - key: solr.xml
+            path: solr.xml
+          name: solr-config
+        name: solr-xml
+      securityContext:
+        fsGroup: 8983
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - cp /opt/solr/server/solr/solr.xml /var/solr/data/solr.xml
+        image: solr:latest
+        imagePullPolicy: IfNotPresent
+        name: cp-solr-xml
+        volumeMounts:
+        - mountPath: /var/solr/data
+          name: data
+      containers:
+      - name: solr
+        image: solr:latest
+        ports:
+        - containerPort: 8983
+        env:
+        - name: SOLR_HOME
+          value: /var/solr/data
+        - name: SOLR_PORT
+          value: "8983"
+        # - name: POD_HOSTNAME
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.name
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        # - name: POD_IP
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: status.podIP
+        # - name: POD_NAMESPACE
+        #   valueFrom:
+        #     fieldRef:
+        #       apiVersion: v1
+        #       fieldPath: metadata.namespace
+        - name: SOLR_HOST
+          value: $(POD_NAME).solr.default
+        - name: ZK_HOST
+          value: zookeeper.default.svc.cluster.local:2181
+        - name: SOLR_OPTS
+          value: "-Dsolr.node.roles=data:off,overseer:disallowed,coordinator:on"
+        volumeMounts:
+        - name: data
+          mountPath: /var/solr/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: "linode-block-storage-retain"
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
