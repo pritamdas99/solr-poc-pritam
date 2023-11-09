@@ -202,5 +202,5 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 10Gi
-      storageClassName: "linode-block-storage-retain"
+          storage: 2Gi
+      storageClassName: "solr-storage"
